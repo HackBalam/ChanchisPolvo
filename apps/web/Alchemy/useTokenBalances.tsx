@@ -4,13 +4,16 @@
  * Este hook se integra con wagmi (Farcaster/Privy) para obtener
  * automáticamente la wallet conectada y consultar sus tokens
  *
- * Uso:
- *   import { useTokenBalances } from '@/Alchemy/useTokenBalances';
+ * Soporta múltiples wallets para escaneo simultáneo
  *
- *   function MyComponent() {
- *     const { balances, isLoading, error, refetch } = useTokenBalances();
- *     // balances contiene los tokens en todas las redes
- *   }
+ * Uso:
+ *   import { useTokenBalances, useMultiWalletTokenBalances } from '@/Alchemy/useTokenBalances';
+ *
+ *   // Para una sola wallet (Farcaster)
+ *   const { balances, isLoading, error, refetch } = useTokenBalances();
+ *
+ *   // Para múltiples wallets
+ *   const { allBalances, isLoading, searchAllWallets } = useMultiWalletTokenBalances();
  */
 
 'use client';
@@ -18,6 +21,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { getAllTokenBalances, getAllTokenBalancesWithMetadata, TokenBalancesResult } from './alchemyconf';
+
+// Tipo para resultados de múltiples wallets
+export interface MultiWalletBalancesResult {
+  // Dirección de la wallet
+  walletAddress: string;
+  // Label de la wallet (ej: "Farcaster", "Wallet 1")
+  label: string;
+  // Resultado de los balances
+  result: TokenBalancesResult | null;
+  // Error específico de esta wallet
+  error: string | null;
+}
 
 // Tipos para las opciones del hook
 interface UseTokenBalancesOptions {
@@ -142,6 +157,106 @@ export function useNetworkTokenBalances(networkKey: string): UseNetworkTokenBala
     refetch,
     walletAddress,
     isConnected,
+  };
+}
+
+// Tipo para wallet con label
+interface WalletWithLabel {
+  address: string;
+  label: string;
+}
+
+// Opciones para el hook de múltiples wallets
+interface UseMultiWalletTokenBalancesOptions {
+  includeMetadata?: boolean;
+}
+
+// Retorno del hook de múltiples wallets
+interface UseMultiWalletTokenBalancesReturn {
+  // Resultados por wallet
+  allBalances: MultiWalletBalancesResult[];
+  // Estado de carga
+  isLoading: boolean;
+  // Función para escanear todas las wallets
+  searchAllWallets: (wallets: WalletWithLabel[]) => Promise<void>;
+  // Resumen total
+  summary: {
+    totalWallets: number;
+    totalTokens: number;
+    successfulWallets: number;
+  };
+}
+
+/**
+ * Hook para escanear tokens en múltiples wallets simultáneamente
+ *
+ * @param options - Opciones de configuración
+ * @returns Estado y funciones para escanear múltiples wallets
+ */
+export function useMultiWalletTokenBalances(
+  { includeMetadata = true }: UseMultiWalletTokenBalancesOptions = {}
+): UseMultiWalletTokenBalancesReturn {
+  const [allBalances, setAllBalances] = useState<MultiWalletBalancesResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  /**
+   * Escanea tokens en todas las wallets proporcionadas
+   */
+  const searchAllWallets = useCallback(async (wallets: WalletWithLabel[]) => {
+    if (wallets.length === 0) {
+      return;
+    }
+
+    setIsLoading(true);
+    setAllBalances([]);
+
+    try {
+      // Ejecutar todas las consultas en paralelo
+      const results = await Promise.all(
+        wallets.map(async (wallet): Promise<MultiWalletBalancesResult> => {
+          try {
+            const result = includeMetadata
+              ? await getAllTokenBalancesWithMetadata(wallet.address)
+              : await getAllTokenBalances(wallet.address);
+
+            return {
+              walletAddress: wallet.address,
+              label: wallet.label,
+              result,
+              error: null,
+            };
+          } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+            return {
+              walletAddress: wallet.address,
+              label: wallet.label,
+              result: null,
+              error: errorMessage,
+            };
+          }
+        })
+      );
+
+      setAllBalances(results);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [includeMetadata]);
+
+  // Calcular resumen
+  const summary = {
+    totalWallets: allBalances.length,
+    totalTokens: allBalances.reduce((sum, wb) => {
+      return sum + (wb.result?.summary.totalTokensFound || 0);
+    }, 0),
+    successfulWallets: allBalances.filter(wb => wb.result !== null).length,
+  };
+
+  return {
+    allBalances,
+    isLoading,
+    searchAllWallets,
+    summary,
   };
 }
 

@@ -13,6 +13,12 @@ interface NetworkConfig {
   name: string;
   url: string;
   chainId: number;
+  // Token nativo de la red
+  nativeToken: {
+    symbol: string;
+    name: string;
+    decimals: number;
+  };
 }
 
 // Tipo para metadata de un token
@@ -29,6 +35,8 @@ export interface TokenBalance {
   balance: string;
   metadata?: TokenMetadata | null;
   formattedBalance?: string;
+  // Indica si es el token nativo de la red
+  isNative?: boolean;
 }
 
 // Tipo para los balances de una red
@@ -58,31 +66,37 @@ const ALCHEMY_NETWORKS: Record<string, NetworkConfig> = {
     name: 'Base',
     url: 'https://base-mainnet.g.alchemy.com/v2',
     chainId: 8453,
+    nativeToken: { symbol: 'ETH', name: 'Ether', decimals: 18 },
   },
   optimism: {
     name: 'OP Mainnet',
     url: 'https://opt-mainnet.g.alchemy.com/v2',
     chainId: 10,
+    nativeToken: { symbol: 'ETH', name: 'Ether', decimals: 18 },
   },
   celo: {
     name: 'Celo',
     url: 'https://celo-mainnet.g.alchemy.com/v2',
     chainId: 42220,
+    nativeToken: { symbol: 'CELO', name: 'Celo', decimals: 18 },
   },
   arbitrum: {
     name: 'Arbitrum',
     url: 'https://arb-mainnet.g.alchemy.com/v2',
     chainId: 42161,
+    nativeToken: { symbol: 'ETH', name: 'Ether', decimals: 18 },
   },
   scroll: {
     name: 'Scroll',
     url: 'https://scroll-mainnet.g.alchemy.com/v2',
     chainId: 534352,
+    nativeToken: { symbol: 'ETH', name: 'Ether', decimals: 18 },
   },
   gnosis: {
     name: 'Gnosis',
     url: 'https://gnosis-mainnet.g.alchemy.com/v2',
     chainId: 100,
+    nativeToken: { symbol: 'xDAI', name: 'xDAI', decimals: 18 },
   },
 };
 
@@ -99,11 +113,74 @@ function getAlchemyApiKey(): string {
 }
 
 /**
- * Obtiene los balances de tokens para una wallet en una red específica
- * Usa el método alchemy_getTokenBalances de la API de Alchemy
+ * Obtiene el balance nativo (ETH, CELO, xDAI, etc.) de una wallet en una red
+ * Usa el método eth_getBalance de la API
  *
  * @param walletAddress - Dirección de la wallet a consultar
- * @param networkKey - Clave de la red (base, polygon, celo, arbitrum, scroll, monad)
+ * @param networkKey - Clave de la red
+ * @returns Balance nativo en wei como string, o null si hay error
+ */
+async function getNativeBalance(walletAddress: string, networkKey: string): Promise<string | null> {
+  const network = ALCHEMY_NETWORKS[networkKey];
+  if (!network) return null;
+
+  const apiKey = getAlchemyApiKey();
+  const url = `${network.url}/${apiKey}`;
+
+  const options = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'eth_getBalance',
+      params: [walletAddress, 'latest'],
+    }),
+  };
+
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      console.error(`getNativeBalance ${network.name}: HTTP ${response.status}`);
+      return null;
+    }
+
+    // Leer como texto primero para manejar respuestas no-JSON
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      console.error(`getNativeBalance ${network.name}: respuesta no es JSON`);
+      return null;
+    }
+
+    if (data.error) {
+      console.error(`getNativeBalance ${network.name}:`, data.error);
+      return null;
+    }
+
+    if (!data.result) {
+      console.error(`getNativeBalance ${network.name}: sin resultado`);
+      return null;
+    }
+
+    // Convertir de hex a decimal string
+    const balance = BigInt(data.result).toString();
+    console.log(`getNativeBalance ${network.name}: ${balance}`);
+    return balance;
+  } catch (err) {
+    console.error(`getNativeBalance ${network.name} error:`, err);
+    return null;
+  }
+}
+
+/**
+ * Obtiene los balances de tokens para una wallet en una red específica
+ * Incluye el token nativo (ETH, CELO, xDAI) y tokens ERC20
+ *
+ * @param walletAddress - Dirección de la wallet a consultar
+ * @param networkKey - Clave de la red (base, optimism, celo, arbitrum, scroll, gnosis)
  * @returns Objeto con los balances de tokens en esa red
  */
 async function getTokenBalancesForNetwork(walletAddress: string, networkKey: string): Promise<NetworkBalances> {
@@ -170,7 +247,7 @@ async function getTokenBalancesForNetwork(walletAddress: string, networkKey: str
       };
     }
 
-    // Procesar los balances de tokens
+    // Procesar los balances de tokens ERC20
     const tokenBalances = data.result?.tokenBalances || [];
 
     // Filtrar tokens con balance mayor a 0
@@ -179,15 +256,41 @@ async function getTokenBalancesForNetwork(walletAddress: string, networkKey: str
       return balance > 0n;
     });
 
+    // Convertir tokens ERC20 al formato esperado
+    const erc20Tokens: TokenBalance[] = nonZeroBalances.map((token: { contractAddress: string; tokenBalance: string }) => ({
+      contractAddress: token.contractAddress,
+      balance: BigInt(token.tokenBalance).toString(),
+      isNative: false,
+    }));
+
+    // Obtener balance nativo (ETH, CELO, xDAI, etc.)
+    const nativeBalance = await getNativeBalance(walletAddress, networkKey);
+    const tokens: TokenBalance[] = [];
+
+    // Agregar token nativo si tiene balance > 0
+    if (nativeBalance && BigInt(nativeBalance) > 0n) {
+      tokens.push({
+        contractAddress: 'native',
+        balance: nativeBalance,
+        isNative: true,
+        metadata: {
+          symbol: network.nativeToken.symbol,
+          name: network.nativeToken.name,
+          decimals: network.nativeToken.decimals,
+          logo: null,
+        },
+        formattedBalance: formatTokenBalance(nativeBalance, network.nativeToken.decimals),
+      });
+    }
+
+    // Agregar tokens ERC20
+    tokens.push(...erc20Tokens);
+
     return {
       network: network.name,
       chainId: network.chainId,
       success: true,
-      tokens: nonZeroBalances.map((token: { contractAddress: string; tokenBalance: string }) => ({
-        contractAddress: token.contractAddress,
-        // El balance viene en hex, lo convertimos a string decimal
-        balance: BigInt(token.tokenBalance).toString(),
-      })),
+      tokens,
     };
   } catch (error: unknown) {
     console.error(`Error fetching tokens from ${network.name}:`, error);
@@ -308,24 +411,41 @@ async function getAllTokenBalancesWithMetadata(walletAddress: string): Promise<T
   // Primero obtenemos todos los balances básicos
   const basicBalances = await getAllTokenBalances(walletAddress);
 
-  // Para cada red, obtenemos la metadata de los tokens
+  // Para cada red, obtenemos la metadata de los tokens ERC20 (los nativos ya tienen metadata)
   for (const [networkKey, networkData] of Object.entries(basicBalances.balances)) {
     if (networkData.success && networkData.tokens.length > 0) {
-      // Obtener metadata para cada token en paralelo
-      const metadataPromises = networkData.tokens.map(token =>
+      // Filtrar tokens que necesitan metadata (solo ERC20, no nativos)
+      const tokensNeedingMetadata = networkData.tokens.filter(t => !t.isNative);
+
+      // Obtener metadata para cada token ERC20 en paralelo
+      const metadataPromises = tokensNeedingMetadata.map(token =>
         getTokenMetadata(token.contractAddress, networkKey)
       );
       const metadataResults = await Promise.all(metadataPromises);
 
-      // Agregar metadata a cada token
-      networkData.tokens = networkData.tokens.map((token, index) => ({
-        ...token,
-        metadata: metadataResults[index],
-        // Calcular balance formateado si tenemos decimales
-        formattedBalance: metadataResults[index]?.decimals
-          ? formatTokenBalance(token.balance, metadataResults[index].decimals)
-          : token.balance,
-      }));
+      // Crear mapa de metadata por contractAddress
+      const metadataMap = new Map<string, TokenMetadata | null>();
+      tokensNeedingMetadata.forEach((token, index) => {
+        metadataMap.set(token.contractAddress, metadataResults[index]);
+      });
+
+      // Agregar metadata a cada token (los nativos ya la tienen)
+      networkData.tokens = networkData.tokens.map((token) => {
+        // Si es nativo, ya tiene metadata y formattedBalance
+        if (token.isNative) {
+          return token;
+        }
+
+        // Para ERC20, agregar metadata obtenida
+        const metadata = metadataMap.get(token.contractAddress);
+        return {
+          ...token,
+          metadata,
+          formattedBalance: metadata?.decimals
+            ? formatTokenBalance(token.balance, metadata.decimals)
+            : token.balance,
+        };
+      });
     }
   }
 

@@ -3,15 +3,23 @@ import { useMiniApp } from "@/contexts/miniapp-context";
 import { sdk } from "@farcaster/frame-sdk";
 import { useState, useEffect } from "react";
 import { useAccount, useConnect } from "wagmi";
+// Hook para obtener balances de tokens en múltiples redes
+import { useTokenBalances } from "../../Alchemy/useTokenBalances";
 
 export default function Home() {
   const { context, isMiniAppReady } = useMiniApp();
   const [isAddingMiniApp, setIsAddingMiniApp] = useState(false);
   const [addMiniAppMessage, setAddMiniAppMessage] = useState<string | null>(null);
-  
+
   // Wallet connection hooks
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors } = useConnect();
+
+  // Hook para buscar tokens - autoFetch desactivado para control manual
+  const { balances, isLoading: isSearchingTokens, error: tokenError, refetch: searchTokens } = useTokenBalances({
+    includeMetadata: true,
+    autoFetch: false
+  });
   
   // Auto-connect wallet when miniapp is ready
   useEffect(() => {
@@ -117,23 +125,23 @@ export default function Home() {
             <button
               onClick={async () => {
                 if (isAddingMiniApp) return;
-                
+
                 setIsAddingMiniApp(true);
                 setAddMiniAppMessage(null);
-                
+
                 try {
                   const result = await sdk.actions.addMiniApp();
                   if (result) {
-                    setAddMiniAppMessage("✅ Miniapp added successfully!");
+                    setAddMiniAppMessage("Miniapp added successfully!");
                   } else {
-                    setAddMiniAppMessage("ℹ️ Miniapp was not added (user declined or already exists)");
+                    setAddMiniAppMessage("Miniapp was not added (user declined or already exists)");
                   }
                 } catch (error: any) {
                   console.error('Add miniapp error:', error);
                   if (error?.message?.includes('domain')) {
-                    setAddMiniAppMessage("⚠️ This miniapp can only be added from its official domain");
+                    setAddMiniAppMessage("This miniapp can only be added from its official domain");
                   } else {
-                    setAddMiniAppMessage("❌ Failed to add miniapp. Please try again.");
+                    setAddMiniAppMessage("Failed to add miniapp. Please try again.");
                   }
                 } finally {
                   setIsAddingMiniApp(false);
@@ -149,12 +157,11 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <span>📱</span>
                   Add Miniapp
                 </>
               )}
             </button>
-            
+
             {/* Add Miniapp Status Message */}
             {addMiniAppMessage && (
               <div className="mt-3 p-3 bg-white/30 backdrop-blur-sm rounded-lg">
@@ -162,6 +169,95 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Botón Buscar Polvo - Busca tokens en todas las redes */}
+          <div className="mb-6">
+            <button
+              onClick={() => {
+                // Solo buscar si hay wallet conectada
+                if (isConnected && !isSearchingTokens) {
+                  searchTokens();
+                }
+              }}
+              disabled={!isConnected || isSearchingTokens}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2"
+            >
+              {isSearchingTokens ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Buscando polvo...
+                </>
+              ) : (
+                <>
+                  Buscar Polvo
+                </>
+              )}
+            </button>
+
+            {/* Mensaje de error si falla la búsqueda */}
+            {tokenError && (
+              <div className="mt-3 p-3 bg-red-100 backdrop-blur-sm rounded-lg">
+                <p className="text-sm text-red-700">{tokenError}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Resultados de la búsqueda de tokens */}
+          {balances && (
+            <div className="mb-6">
+              {/* Resumen de la búsqueda */}
+              <div className="bg-white/30 backdrop-blur-sm rounded-lg p-4 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Resultados</h3>
+                <div className="text-sm text-gray-600">
+                  <p>Redes consultadas: {balances.summary.successfulNetworks}/{balances.summary.totalNetworks}</p>
+                  <p>Tokens encontrados: {balances.summary.totalTokensFound}</p>
+                </div>
+              </div>
+
+              {/* Lista de tokens por red */}
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {Object.entries(balances.balances).map(([networkKey, networkData]: [string, any]) => (
+                  <div key={networkKey} className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
+                    {/* Nombre de la red */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-gray-900">{networkData.network}</span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        networkData.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {networkData.success ? `${networkData.tokens.length} tokens` : 'Error'}
+                      </span>
+                    </div>
+
+                    {/* Lista de tokens en esta red */}
+                    {networkData.success && networkData.tokens.length > 0 && (
+                      <div className="space-y-1">
+                        {networkData.tokens.map((token: any, index: number) => (
+                          <div key={index} className="flex items-center justify-between text-sm bg-white/30 rounded px-2 py-1">
+                            <span className="text-gray-700 font-mono">
+                              {token.metadata?.symbol || 'UNKNOWN'}
+                            </span>
+                            <span className="text-gray-600">
+                              {token.formattedBalance || token.balance}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Mensaje si no hay tokens en esta red */}
+                    {networkData.success && networkData.tokens.length === 0 && (
+                      <p className="text-xs text-gray-500">Sin tokens</p>
+                    )}
+
+                    {/* Mensaje de error para esta red */}
+                    {!networkData.success && (
+                      <p className="text-xs text-red-500">{networkData.error}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </main>

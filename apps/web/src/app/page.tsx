@@ -125,13 +125,16 @@ export default function Home() {
             <div className="bg-white/30 backdrop-blur-sm rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-900">Wallets para escanear</h3>
-                <button
-                  onClick={connectWithPrivy}
-                  disabled={isPrivyLoading}
-                  className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition-colors disabled:opacity-50"
-                >
-                  {isPrivyLoading ? 'Cargando...' : '+ Conectar Wallet'}
-                </button>
+                {/* Solo mostrar botón de Privy si NO hay wallet de Farcaster conectada */}
+                {!isConnected && (
+                  <button
+                    onClick={connectWithPrivy}
+                    disabled={isPrivyLoading}
+                    className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition-colors disabled:opacity-50"
+                  >
+                    {isPrivyLoading ? 'Cargando...' : '+ Conectar Wallet'}
+                  </button>
+                )}
               </div>
 
               {/* Lista de wallets */}

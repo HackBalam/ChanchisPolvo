@@ -9,7 +9,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useConnectorClient } from 'wagmi';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 
 // Tipo para una wallet en la lista
@@ -27,6 +27,8 @@ interface UseMultipleWalletsReturn {
   wallets: WalletEntry[];
   // Wallet principal de Farcaster
   farcasterWallet: string | undefined;
+  // Indica si hay una wallet de Farcaster conectada (no Privy)
+  isFarcasterConnected: boolean;
   // Wallets conectadas via Privy
   privyWallets: WalletEntry[];
   // Conectar nueva wallet con Privy
@@ -52,8 +54,8 @@ interface UseMultipleWalletsReturn {
  * @returns Funciones y estado para manejar wallets
  */
 export function useMultipleWallets(): UseMultipleWalletsReturn {
-  // Wallet conectada via Farcaster/wagmi
-  const { address: farcasterAddress } = useAccount();
+  // Wallet conectada via wagmi (puede ser Farcaster o Privy)
+  const { address: wagmiAddress, connector } = useAccount();
 
   // Privy hooks
   const { ready, authenticated, login, logout } = usePrivy();
@@ -61,6 +63,19 @@ export function useMultipleWallets(): UseMultipleWalletsReturn {
 
   // Estado para wallets de Privy procesadas
   const [privyWallets, setPrivyWallets] = useState<WalletEntry[]>([]);
+
+  // Determinar si la conexión wagmi es de Farcaster (no de Privy)
+  // Farcaster usa el conector con id 'farcaster'
+  const isFarcasterConnected = !!(wagmiAddress && connector?.id === 'farcaster');
+  const farcasterAddress = isFarcasterConnected ? wagmiAddress : undefined;
+
+  console.log('useMultipleWallets: Connection state', {
+    wagmiAddress,
+    connectorId: connector?.id,
+    isFarcasterConnected,
+    farcasterAddress,
+    isPrivyAuthenticated: authenticated,
+  });
 
   /**
    * Normaliza una dirección (lowercase para comparación)
@@ -173,6 +188,7 @@ export function useMultipleWallets(): UseMultipleWalletsReturn {
   return {
     wallets,
     farcasterWallet: farcasterAddress,
+    isFarcasterConnected,
     privyWallets,
     connectWithPrivy,
     disconnectPrivyWallet,

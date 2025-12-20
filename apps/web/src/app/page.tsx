@@ -24,6 +24,7 @@ export default function Home() {
     disconnectPrivyWallet,
     isPrivyAuthenticated,
     isPrivyLoading,
+    isFarcasterConnected,
   } = useMultipleWallets();
 
   // Hook para buscar tokens en múltiples wallets
@@ -72,11 +73,12 @@ export default function Home() {
   useEffect(() => {
     console.log('Page: Wallet state', {
       isConnected,
+      isFarcasterConnected,
       isPrivyAuthenticated,
       walletsCount: wallets.length,
       wallets: wallets.map(w => ({ address: w.address, source: w.source, label: w.label })),
     });
-  }, [isConnected, isPrivyAuthenticated, wallets]);
+  }, [isConnected, isFarcasterConnected, isPrivyAuthenticated, wallets]);
 
   if (!isMiniAppReady) {
     return (
@@ -139,8 +141,8 @@ export default function Home() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-900">Wallets para escanear</h3>
                 <div className="flex items-center gap-2">
-                  {/* Botón para desconectar Privy cuando está autenticado */}
-                  {isPrivyAuthenticated && !isConnected && (
+                  {/* Botón para desconectar Privy cuando está autenticado y NO es Farcaster */}
+                  {isPrivyAuthenticated && !isFarcasterConnected && (
                     <button
                       onClick={() => disconnectPrivyWallet('')}
                       className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 transition-colors"
@@ -148,8 +150,8 @@ export default function Home() {
                       Desconectar
                     </button>
                   )}
-                  {/* Solo mostrar botón de Privy si NO hay wallet de Farcaster conectada */}
-                  {!isConnected && !isPrivyAuthenticated && (
+                  {/* Solo mostrar botón de Privy si NO hay wallet de Farcaster conectada y Privy no está autenticado */}
+                  {!isFarcasterConnected && !isPrivyAuthenticated && (
                     <button
                       onClick={connectWithPrivy}
                       disabled={isPrivyLoading}
@@ -194,7 +196,7 @@ export default function Home() {
                 ))}
                 {wallets.length === 0 && (
                   <p className="text-xs text-gray-500 text-center py-2">
-                    {isConnected ? 'Tu wallet de Farcaster aparecera aqui' : 'Conecta tu wallet para empezar'}
+                    {isFarcasterConnected ? 'Tu wallet de Farcaster aparecerá aquí' : 'Conecta tu wallet para empezar'}
                   </p>
                 )}
               </div>

@@ -85,9 +85,8 @@ interface PrivyConfigProviderProps {
  * Permite conectar wallets adicionales para escanear tokens
  */
 export default function PrivyConfigProvider({ children }: PrivyConfigProviderProps) {
-  // Obtener las credenciales de Privy desde variables de entorno
+  // Obtener el App ID de Privy desde variables de entorno
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || '';
-  const clientId = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID || '';
 
   // Si no hay credenciales, renderizar children sin el provider
   if (!appId || appId === 'your-privy-app-id') {
@@ -98,7 +97,6 @@ export default function PrivyConfigProvider({ children }: PrivyConfigProviderPro
   return (
     <PrivyProvider
       appId={appId}
-      clientId={clientId}
       config={{
         // Apariencia del modal de Privy
         appearance: {

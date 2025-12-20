@@ -82,7 +82,7 @@ const ALCHEMY_NETWORKS: Record<string, NetworkConfig> = {
   monad: {
     name: 'Monad',
     url: 'https://monad-mainnet.g.alchemy.com/v2',
-    chainId: 0, // Monad aún no tiene chainId oficial en mainnet
+    chainId: 10143,
   },
 };
 
@@ -130,16 +130,42 @@ async function getTokenBalancesForNetwork(walletAddress: string, networkKey: str
 
   try {
     const response = await fetch(url, options);
-    const data = await response.json();
 
-    // Verificar si hay errores en la respuesta
+    // Verificar si la respuesta es OK
+    if (!response.ok) {
+      return {
+        network: network.name,
+        chainId: network.chainId,
+        success: false,
+        error: `HTTP ${response.status}: Red no disponible o API key sin acceso`,
+        tokens: [],
+      };
+    }
+
+    // Intentar parsear como JSON, manejar respuestas HTML/texto
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      // La respuesta no es JSON (probablemente HTML de error)
+      return {
+        network: network.name,
+        chainId: network.chainId,
+        success: false,
+        error: 'API key no tiene acceso a esta red',
+        tokens: [],
+      };
+    }
+
+    // Verificar si hay errores en la respuesta JSON-RPC
     if (data.error) {
       console.error(`Error en ${network.name}:`, data.error);
       return {
         network: network.name,
         chainId: network.chainId,
         success: false,
-        error: data.error.message,
+        error: data.error.message || 'Error de la API',
         tokens: [],
       };
     }
@@ -165,7 +191,7 @@ async function getTokenBalancesForNetwork(walletAddress: string, networkKey: str
     };
   } catch (error: unknown) {
     console.error(`Error fetching tokens from ${network.name}:`, error);
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    const errorMessage = error instanceof Error ? error.message : 'Error de conexión';
     return {
       network: network.name,
       chainId: network.chainId,

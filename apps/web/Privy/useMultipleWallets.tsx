@@ -73,7 +73,14 @@ export function useMultipleWallets(): UseMultipleWalletsReturn {
    * Procesar wallets de Privy cuando cambian
    */
   useEffect(() => {
-    if (ready && authenticated && privyWalletsRaw) {
+    console.log('useMultipleWallets: Processing Privy wallets', {
+      ready,
+      authenticated,
+      privyWalletsCount: privyWalletsRaw?.length || 0,
+      farcasterAddress,
+    });
+
+    if (ready && authenticated && privyWalletsRaw && privyWalletsRaw.length > 0) {
       const processed: WalletEntry[] = privyWalletsRaw
         .filter(w => w.address) // Solo wallets con dirección
         .filter(w => {
@@ -87,11 +94,12 @@ export function useMultipleWallets(): UseMultipleWalletsReturn {
           address: w.address,
           label: w.walletClientType === 'privy'
             ? 'Embedded'
-            : `Privy ${index + 1}`,
+            : w.walletClientType || `Privy ${index + 1}`,
           source: 'privy' as const,
           walletClientType: w.walletClientType,
         }));
 
+      console.log('useMultipleWallets: Processed Privy wallets', processed);
       setPrivyWallets(processed);
     } else {
       setPrivyWallets([]);

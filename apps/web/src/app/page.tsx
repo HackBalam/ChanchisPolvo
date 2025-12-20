@@ -34,15 +34,18 @@ export default function Home() {
     summary,
   } = useMultiWalletTokenBalances({ includeMetadata: true });
 
-  // Auto-connect wallet when miniapp is ready
+  // Auto-connect wallet only when inside Farcaster (context exists)
   useEffect(() => {
-    if (isMiniAppReady && !isConnected && !isConnecting && connectors.length > 0) {
+    // Solo auto-conectar si estamos dentro de Farcaster (hay contexto de usuario)
+    const isInsideFarcaster = context?.user !== undefined;
+
+    if (isMiniAppReady && isInsideFarcaster && !isConnected && !isConnecting && connectors.length > 0) {
       const farcasterConnector = connectors.find(c => c.id === 'farcaster');
       if (farcasterConnector) {
         connect({ connector: farcasterConnector });
       }
     }
-  }, [isMiniAppReady, isConnected, isConnecting, connectors, connect]);
+  }, [isMiniAppReady, context, isConnected, isConnecting, connectors, connect]);
 
   // Extract user data from context
   const user = context?.user;

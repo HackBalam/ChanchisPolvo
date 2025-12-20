@@ -59,10 +59,10 @@ const ALCHEMY_NETWORKS: Record<string, NetworkConfig> = {
     url: 'https://base-mainnet.g.alchemy.com/v2',
     chainId: 8453,
   },
-  polygon: {
-    name: 'Polygon',
-    url: 'https://polygon-mainnet.g.alchemy.com/v2',
-    chainId: 137,
+  optimism: {
+    name: 'OP Mainnet',
+    url: 'https://opt-mainnet.g.alchemy.com/v2',
+    chainId: 10,
   },
   celo: {
     name: 'Celo',
@@ -79,10 +79,10 @@ const ALCHEMY_NETWORKS: Record<string, NetworkConfig> = {
     url: 'https://scroll-mainnet.g.alchemy.com/v2',
     chainId: 534352,
   },
-  monad: {
-    name: 'Monad',
-    url: 'https://monad-mainnet.g.alchemy.com/v2',
-    chainId: 10143,
+  gnosis: {
+    name: 'Gnosis',
+    url: 'https://gnosis-mainnet.g.alchemy.com/v2',
+    chainId: 100,
   },
 };
 
